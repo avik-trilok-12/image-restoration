@@ -1,0 +1,23 @@
+# MATLAB
+*.asv
+*.autosave
+*.m~
+*.matlab
+
+# MATLAB temporary files
+slprj/
+*_slrtip/
+*.mex*
+*.mexmaci*
+*.mexmaca64
+*.mexw64
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# MATLAB generated project files
+*.bak
