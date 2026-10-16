@@ -1,132 +1,68 @@
-%% EXPERIMENT 02
-% Inverse filtering vs Wiener filtering under Gaussian noise
-%
-% Objective:
-%   Demonstrate the instability of inverse filtering in the presence
-%   of additive Gaussian noise and compare it with Wiener filtering.
+function result = exp_02_noise_comparison(img, cfg, outDir)
+% EXPERIMENT 02: Inverse vs Wiener filtering under Gaussian noise.
 
-clearvars;
-close all;
-clc;
-
-%% Setup
-
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
-
-addpath(fullfile(projectRoot, 'src'));
-
-%% Load image
-
-data = load(fullfile(projectRoot, 'data', 'img_restoration.mat'));
-
-img = data.I1;
-
-%% Experiment parameters
-
-motionLength = 15;
-motionAngle  = 0;
-
-noiseVariance = 100;
-
-epsilon = 1e-3;
-
-%% Generate blur model
-
-psf = generate_motion_psf(motionLength, motionAngle);
-
+img = double(img);
+[M, N] = size(img);
+psf = generate_motion_psf(cfg.motionLength, cfg.motionAngle);
 H = create_frequency_response(psf, size(img));
 
-%% Apply motion blur
-
+rng(cfg.randomSeed);
 blurred = apply_blur(img, H);
-
-%% Add Gaussian noise
-
-rng(1);
-
-noise = sqrt(noiseVariance) * randn(size(img));
-
+noise = sqrt(cfg.noiseVariance) * randn(M, N);
 degraded = blurred + noise;
-
-%% Inverse filtering
-
-restoredInverse = inverse_filter( ...
-    degraded, H, epsilon);
-
-%% Wiener filtering
-
-F = fft2(img);
-
-restoredWiener = wiener_filter( ...
-    degraded, H, F, noiseVariance);
-
-%% Calculate metrics
-
-[mseInverse, psnrInverse] = ...
-    calculate_metrics(img, restoredInverse);
-
-[mseWiener, psnrWiener] = ...
-    calculate_metrics(img, restoredWiener);
-
-%% Actual noise statistics
-
 actualNoiseVariance = var(noise(:));
 
-%% Display results
+restoredInverse = inverse_filter(degraded, H, cfg.epsilon);
+F = fft2(img);
+restoredWiener = wiener_filter(degraded, H, F, cfg.noiseVariance);
 
-fprintf('\n');
+[mseInverse, psnrInverse] = calculate_metrics(img, restoredInverse);
+[mseWiener, psnrWiener] = calculate_metrics(img, restoredWiener);
+
+fprintf('\n=============================================\n');
+fprintf('EXPERIMENT 02: NOISE COMPARISON (%s)\n', cfg.imageName);
 fprintf('=============================================\n');
-fprintf('EXPERIMENT 02: NOISE COMPARISON\n');
-fprintf('=============================================\n');
+fprintf('Motion length           : %g\n', cfg.motionLength);
+fprintf('Motion angle            : %.1f degrees\n', cfg.motionAngle);
+fprintf('Target noise variance   : %.4f\n', cfg.noiseVariance);
+fprintf('Measured noise variance : %.4f\n', actualNoiseVariance);
+fprintf('Inverse MSE / PSNR      : %.6f / %.4f dB\n', mseInverse, psnrInverse);
+fprintf('Wiener MSE / PSNR       : %.6f / %.4f dB\n', mseWiener, psnrWiener);
+fprintf('Wiener improvement      : %.4f dB\n', psnrWiener - psnrInverse);
 
-fprintf('Motion blur length      : %d\n', motionLength);
-fprintf('Noise variance          : %.2f\n', noiseVariance);
-fprintf('Measured noise variance : %.2f\n', actualNoiseVariance);
+fig = figure('Color', 'w', 'Units', 'pixels', 'Position', [100, 100, 1400, 400], ...
+    'Name', sprintf('%s - Experiment 02', cfg.imageName));
 
-fprintf('\n');
-fprintf('Inverse Filter\n');
-fprintf('MSE                     : %.4f\n', mseInverse);
-fprintf('PSNR                    : %.2f dB\n', psnrInverse);
+t = tiledlayout(fig, 1, 4, 'Padding', 'compact', 'TileSpacing', 'compact');
 
-fprintf('\n');
-fprintf('Wiener Filter\n');
-fprintf('MSE                     : %.4f\n', mseWiener);
-fprintf('PSNR                    : %.2f dB\n', psnrWiener);
-
-fprintf('\n');
-fprintf('Wiener improvement      : %.2f dB\n', ...
-    psnrWiener - psnrInverse);
-
-%% Display images
-
-figure('Name', 'Experiment 02 - Noise Comparison');
-
-subplot(1,4,1);
+nexttile(t);
 imshow(img, []);
-title('Original');
+title('Original', 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-subplot(1,4,2);
+nexttile(t);
 imshow(degraded, []);
-title('Blur + Noise');
+title('Blur + noise', 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-subplot(1,4,3);
+nexttile(t);
 imshow(restoredInverse, []);
-title('Inverse Filter');
+title(sprintf('Inverse (%.2f dB)', psnrInverse), 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-subplot(1,4,4);
+nexttile(t);
 imshow(restoredWiener, []);
-title('Wiener Filter');
+title(sprintf('Wiener (%.2f dB)', psnrWiener), 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-sgtitle('Restoration under Motion Blur + Gaussian Noise');
+title(t, sprintf('%s: Motion Blur + Gaussian Noise (\\sigma^2 = %.4f)', cfg.imageName, cfg.noiseVariance), ...
+    'Color', 'k', 'FontSize', 14, 'FontWeight', 'bold');
 
-%% Save figure
+exportgraphics(fig, fullfile(outDir.figures, 'exp02_noise_comparison.png'), ...
+    'Resolution', 300, 'BackgroundColor', 'white');
 
-resultsDir = fullfile(projectRoot, 'results', 'figures');
+Method = ["Inverse"; "Wiener"];
+MSE = [mseInverse; mseWiener];
+PSNR_dB = [psnrInverse; psnrWiener];
+writetable(table(Method, MSE, PSNR_dB), fullfile(outDir.tables, 'exp02_noise_comparison.csv'));
 
-if ~exist(resultsDir, 'dir')
-    mkdir(resultsDir);
+result = struct('mseInverse', mseInverse, 'psnrInverse', psnrInverse, ...
+    'mseWiener', mseWiener, 'psnrWiener', psnrWiener, ...
+    'targetNoiseVariance', cfg.noiseVariance, 'actualNoiseVariance', actualNoiseVariance);
 end
-
-exportgraphics(gcf, ...
-    fullfile(resultsDir, 'exp02_noise_comparison.png'), ...
-    'Resolution', 300);

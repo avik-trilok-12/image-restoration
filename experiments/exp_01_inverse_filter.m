@@ -1,117 +1,74 @@
-%% EXPERIMENT 01
-% Inverse filtering under motion blur
-%
-% Objective:
-%   Evaluate inverse filtering when the degradation consists only
-%   of known motion blur.
-%
-% Output:
-%   - Original image
-%   - Motion blurred image
-%   - Inverse-filtered reconstruction
-%   - MSE and PSNR
+function result = exp_01_inverse_filter(img, cfg, outDir)
+% EXPERIMENT 01: Noise-free inverse filtering under motion blur.
 
-clearvars;
-close all;
-clc;
-
-%% Setup
-
-projectRoot = fileparts(fileparts(mfilename('fullpath')));
-
-addpath(fullfile(projectRoot, 'src'));
-
-%% Load image
-
-data = load(fullfile(projectRoot, 'data', 'img_restoration.mat'));
-
-img = data.I1;
-
-%% Experiment parameters
-
-motionLength = 15;
-motionAngle  = 0;
-epsilon      = 1e-3;
-
-%% Generate degradation model
-
-psf = generate_motion_psf(motionLength, motionAngle);
-
+img = double(img);
+psf = generate_motion_psf(cfg.motionLength, cfg.motionAngle);
 H = create_frequency_response(psf, size(img));
-
-%% Apply motion blur
-
 blurred = apply_blur(img, H);
-
-%% Inverse filtering
-
-restored = inverse_filter(blurred, H, epsilon);
-
-%% Calculate metrics
-
+restored = inverse_filter(blurred, H, cfg.epsilon);
 [mse, psnrValue] = calculate_metrics(img, restored);
-
-%% Frequency response analysis
 
 minH = min(abs(H(:)));
 maxH = max(abs(H(:)));
-
-valid = abs(H) > epsilon;
-
-discardedPoints = sum(~valid);
+valid = abs(H) > cfg.epsilon;
+discardedPoints = nnz(~valid);
 totalPoints = numel(H);
 discardedPercentage = 100 * discardedPoints / totalPoints;
 
-%% Display results
-
-fprintf('\n');
+fprintf('\n=============================================\n');
+fprintf('EXPERIMENT 01: INVERSE FILTERING (%s)\n', cfg.imageName);
 fprintf('=============================================\n');
-fprintf('EXPERIMENT 01: INVERSE FILTERING\n');
-fprintf('=============================================\n');
-
-fprintf('Image size              : %d x %d\n', ...
-    size(img,1), size(img,2));
-
-fprintf('Motion blur length      : %d\n', motionLength);
-fprintf('Motion blur angle       : %.1f degrees\n', motionAngle);
-
-fprintf('Minimum |H|             : %.6f\n', minH);
-fprintf('Maximum |H|             : %.6f\n', maxH);
-
-fprintf('Inverse threshold       : %.1e\n', epsilon);
-
-fprintf('Discarded frequencies  : %d / %d (%.2f%%)\n', ...
+fprintf('Image size              : %d x %d\n', size(img,1), size(img,2));
+fprintf('Motion blur length      : %g\n', cfg.motionLength);
+fprintf('Motion blur angle       : %.1f degrees\n', cfg.motionAngle);
+fprintf('Minimum |H|             : %.8f\n', minH);
+fprintf('Maximum |H|             : %.8f\n', maxH);
+fprintf('Inverse threshold       : %.1e\n', cfg.epsilon);
+fprintf('Discarded frequencies   : %d / %d (%.4f%%)\n', ...
     discardedPoints, totalPoints, discardedPercentage);
+fprintf('MSE                     : %.8f\n', mse);
+fprintf('PSNR                    : %.4f dB\n', psnrValue);
 
-fprintf('MSE                     : %.4f\n', mse);
-fprintf('PSNR                    : %.2f dB\n', psnrValue);
+fig = figure('Color', 'w', 'Units', 'pixels', 'Position', [100, 100, 1200, 420], ...
+    'Name', sprintf('%s - Experiment 01', cfg.imageName));
 
-%% Display restoration
+% 2. Use tiledlayout for tight margins and proper spacing
+t = tiledlayout(fig, 1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
 
-figure('Name', 'Experiment 01 - Inverse Filtering');
-
-subplot(1,3,1);
+% Subplot 1
+nexttile(t);
 imshow(img, []);
-title('Original');
+title('Original', 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-subplot(1,3,2);
+% Subplot 2
+nexttile(t);
 imshow(blurred, []);
-title('Motion Blurred');
+title('Motion blurred', 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-subplot(1,3,3);
+% Subplot 3
+nexttile(t);
 imshow(restored, []);
-title('Inverse Filter');
+title(sprintf('Inverse (%.2f dB)', psnrValue), 'Color', 'k', 'FontSize', 12, 'FontWeight', 'bold');
 
-sgtitle('Inverse Filtering under Motion Blur');
+% Overall Title in bold black
+title(t, sprintf('%s: Inverse Filtering | Length = %g, Angle = %.1f deg', ...
+    cfg.imageName, cfg.motionLength, cfg.motionAngle), ...
+    'Color', 'k', 'FontSize', 14, 'FontWeight', 'bold');
 
-%% Save figure
+% 3. Export with tight bounding box
+exportgraphics(fig, fullfile(outDir.figures, 'exp01_inverse_filter.png'), ...
+    'Resolution', 300, 'BackgroundColor', 'white');
 
-resultsDir = fullfile(projectRoot, 'results', 'figures');
-
-if ~exist(resultsDir, 'dir')
-    mkdir(resultsDir);
+result = struct('imageName', cfg.imageName, 'imageSize', size(img), ...
+    'motionLength', cfg.motionLength, 'motionAngle', cfg.motionAngle, ...
+    'epsilon', cfg.epsilon, 'minAbsH', minH, 'maxAbsH', maxH, ...
+    'discardedPoints', discardedPoints, 'totalPoints', totalPoints, ...
+    'discardedPercentage', discardedPercentage, 'MSE', mse, 'PSNR_dB', psnrValue);
+T = table(string(cfg.imageName), size(img,1), size(img,2), ...
+    cfg.motionLength, cfg.motionAngle, cfg.epsilon, minH, maxH, ...
+    discardedPoints, totalPoints, discardedPercentage, mse, psnrValue, ...
+    'VariableNames', {'Image','Rows','Columns','MotionLength','MotionAngle', ...
+    'Epsilon','MinAbsH','MaxAbsH','DiscardedPoints','TotalPoints', ...
+    'DiscardedPercentage','MSE','PSNR_dB'});
+writetable(T, fullfile(outDir.tables, 'exp01_inverse_filter.csv'));
 end
-
-exportgraphics(gcf, ...
-    fullfile(resultsDir, 'exp01_inverse_filter.png'), ...
-    'Resolution', 300);
