@@ -1,205 +1,226 @@
 # Frequency-Domain Image Restoration
 
-Image restoration of motion-blurred and noisy images using inverse filtering and Wiener filtering in the frequency domain.
+A MATLAB project exploring frequency-domain restoration of motion-blurred and noisy images. The project implements inverse filtering, Wiener filtering, scalar regularization, and Laplacian/Tikhonov regularization, then evaluates their behavior under controlled noise and blur conditions.
 
----
+## Table of Contents
+
+- [Overview](#overview)
+- [Objectives](#objectives)
+- [Dataset](#dataset)
+- [Methods](#methods)
+- [Experiments](#experiments)
+- [Repository Structure](#repository-structure)
+- [Requirements](#requirements)
+- [Running the Project](#running-the-project)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Current Results](#current-results)
+- [Interpretation and Limitations](#interpretation-and-limitations)
+- [Reproducibility](#reproducibility)
 
 ## Overview
 
-Image degradation is commonly caused by motion blur, defocus, sensor noise, and other imperfections during image acquisition. Recovering the original image from a degraded observation is known as **image restoration**.
+Image restoration aims to estimate a clean image from an observation degraded by blur and noise. This project uses the synthetic degradation model
 
-This project investigates frequency-domain techniques for restoring images degraded by:
+$$
+g(x,y) = h(x,y) * f(x,y) + n(x,y),
+$$
 
-- Linear motion blur
-- Additive Gaussian noise
+where $f(x,y)$ is the original image, $h(x,y)$ is the motion-blur point-spread function (PSF), $*$ denotes convolution, $n(x,y)$ is additive noise, and $g(x,y)$ is the degraded observation.
 
-Two classical restoration approaches are implemented and compared:
-
-1. **Inverse Filtering**
-2. **Wiener Filtering**
-
-The project studies how the performance of these methods changes as the degradation becomes more severe. In particular, experiments investigate the effects of:
-
-- Frequency-domain inversion and ill-conditioned blur transfer functions
-- Increasing Gaussian noise variance
-- Increasing motion-blur length
-- Noise amplification in inverse filtering
-- The robustness of Wiener filtering under noisy conditions
-
-All experiments are implemented in MATLAB and are organized into reusable source functions and independent experiment scripts.
-
----
+The blur is represented in the frequency domain using the two-dimensional Fourier transform. Restoration filters operate on the degraded image's spectrum to estimate the original image.
 
 ## Objectives
 
-The main objectives of this project are:
+- Simulate motion blur and additive noise.
+- Implement and compare inverse and Wiener filtering.
+- Study how noise variance and motion-blur length affect restoration quality.
+- Evaluate scalar regularization of inverse filtering.
+- Implement Laplacian/Tikhonov regularization and compare it with baseline methods.
+- Quantitatively evaluate restoration using mean squared error (MSE) and peak signal-to-noise ratio (PSNR).
+- Save experiment figures and tables for analysis and reporting.
 
-1. Model image degradation mathematically in the spatial and frequency domains.
-2. Implement a frequency-domain motion-blur model.
-3. Implement inverse filtering for image restoration.
-4. Implement Wiener filtering for restoration in the presence of noise.
-5. Quantitatively evaluate restoration using:
-   - Mean Squared Error (MSE)
-   - Peak Signal-to-Noise Ratio (PSNR)
-6. Study the effect of increasing noise variance.
-7. Study the effect of increasing motion-blur length.
-8. Compare the robustness of inverse and Wiener filtering.
-9. Build a reproducible MATLAB project structure suitable for further research.
+## Dataset
 
----
+The project uses two grayscale images supplied in `data/img_restoration.mat`:
 
-# Mathematical Background
+| Image | Dimensions | Intensity range |
+|---|---:|---:|
+| `I1` | 220 × 220 | 21–240 |
+| `I2` | 256 × 256 | 0–255 |
 
-## 1. Image Degradation Model
+The data file contains the variables `I1` and `I2`. Images are converted to `double` for numerical processing.
 
-The observed degraded image can be modeled as:
+## Methods
 
-$$
-g(x,y) = h(x,y) \ast f(x,y) + n(x,y)
-$$
+### 1. Motion-blur model
 
-where:
+A motion-blur PSF is generated with MATLAB's `fspecial('motion', motionLength, motionAngle)`. The PSF is embedded in an image-sized array, shifted to place its origin appropriately, and transformed with `fft2` to obtain the frequency response $H(u,v)$.
 
-- $f(x,y)$ is the original image.
-- $h(x,y)$ is the point spread function (PSF).
-- $\ast$ denotes spatial convolution.
-- $n(x,y)$ is additive noise.
-- $g(x,y)$ is the observed degraded image.
+The implementation uses FFT-based circular convolution. Therefore, the noise-free inverse reconstruction experiment tests the consistency of this simulated model; it does not represent every boundary condition encountered in real photographs.
 
-For this project, the degradation consists of a linear motion blur followed by additive Gaussian noise.
+### 2. Inverse filtering
 
----
-
-## 2. Frequency-Domain Representation
-
-Using the Fourier transform, convolution becomes multiplication:
+Inverse filtering estimates the original spectrum by dividing the degraded spectrum by the blur response:
 
 $$
-G(u,v) = H(u,v)F(u,v) + N(u,v)
+\hat F(u,v) = \frac{G(u,v)}{H(u,v)}.
 $$
 
-where:
+Division by very small values of $H(u,v)$ can amplify noise. The implementation therefore uses a threshold $\epsilon$ and only divides at frequencies satisfying $|H(u,v)| > \epsilon$.
 
-- $F(u,v)$ is the Fourier transform of the original image.
-- $H(u,v)$ is the frequency response of the blur PSF.
-- $G(u,v)$ is the Fourier transform of the degraded image.
-- $N(u,v)$ is the Fourier transform of the noise.
+### 3. Wiener filtering
 
-This representation allows restoration to be performed directly in the frequency domain.
+Wiener filtering balances inversion of the blur response with suppression of frequencies where noise is dominant. In this implementation, the filter uses the clean image's Fourier spectrum to calculate the signal power term, together with the configured noise variance.
 
----
+**Important:** because the clean image is used to supply its spectrum, this implementation is an oracle-informed benchmark. It should not be interpreted as a fully deployable Wiener filter for an unknown real-world image without a corresponding method to estimate the signal spectrum.
 
-# Restoration Methods
+### 4. Scalar regularized inverse filtering
 
-## Inverse Filtering
+Scalar regularization stabilizes inverse filtering by adding a regularization term to the denominator. The experiment sweeps candidate regularization values and selects the one with the best PSNR against the clean reference image.
 
-The ideal inverse filter attempts to recover the original spectrum using:
+The selected parameter is therefore ground-truth-informed for the tested image and degradation.
 
-$$
-\hat{F}_{\mathrm{inv}}(u,v)
-=
-\frac{G(u,v)}{H(u,v)}
-$$
+### 5. Laplacian/Tikhonov regularization
 
-However, when $H(u,v)$ is close to zero, the division becomes numerically unstable.
-
-Considering the degradation model:
+Laplacian/Tikhonov filtering penalizes spatial variation through the frequency response of a discrete two-dimensional Laplacian. Its frequency-domain form in this project is:
 
 $$
-G = HF + N
+\hat F(u,v) =
+\frac{H^*(u,v)G(u,v)}
+{|H(u,v)|^2 + \lambda |P(u,v)|^2},
 $$
 
-the inverse-filter estimate becomes:
+where $H(u,v)$ is the blur transfer function, $G(u,v)$ is the degraded image spectrum, $H^*(u,v)$ is the complex conjugate of $H(u,v)$, $P(u,v)$ is the Laplacian frequency response, and $\lambda$ controls the strength of regularization.
 
-$$
-\begin{aligned}
-\hat{F}_{\mathrm{inv}}
-&= \frac{G}{H} \\
-&= \frac{HF + N}{H} \\
-&= F + \frac{N}{H}
-\end{aligned}
-$$
+A lambda sweep is used to study the effect of regularization strength. In the current experiment, the best lambda is selected using PSNR against the clean image, so this is also an oracle-informed parameter-selection procedure.
 
-Therefore, frequencies where $|H(u,v)|$ is small can cause significant noise amplification.
+## Experiments
 
-A threshold is therefore used during implementation:
+The project contains six experiments. Each experiment accepts an image, a configuration structure, and an output-directory structure, allowing the same implementation to run on `I1` and `I2`.
 
-$$
-|H(u,v)| < \epsilon
-$$
+| Experiment | Script | Purpose |
+|---|---|---|
+| 01 | `experiments/exp_01_inverse_filter.m` | Tests inverse filtering under the configured blur model, including a noise-free reconstruction diagnostic. |
+| 02 | `experiments/exp_02_noise_comparison.m` | Compares inverse and Wiener filtering for a fixed blur and noise setting. |
+| 03 | `experiments/exp_03_noise_sweep.m` | Measures restoration quality across several noise variances. |
+| 04 | `experiments/exp_04_blur_sweep.m` | Measures restoration quality across several motion-blur lengths. |
+| 05 | `experiments/exp_05_regularized_inverse.m` | Sweeps scalar regularization values and compares the selected result with baseline filters. |
+| 06 | `experiments/exp_06_laplacian_tikhonov.m` | Sweeps Laplacian/Tikhonov regularization values and compares the selected reconstruction with inverse and Wiener filtering. |
 
-Frequencies below this threshold are not directly inverted.
+The current configuration described during development uses a motion length of 15, motion angle of 0 degrees, target noise variance of 100, inverse threshold of $10^{-3}$, and random seed of 1. The noise sweep uses variances `[1, 10, 25, 50, 100, 200, 500]`; the blur sweep uses lengths `[5, 10, 15, 20, 30, 40, 50]`. Check `main.m` for the active configuration, as values may be changed for further experiments.
 
----
-
-## Wiener Filtering
-
-Wiener filtering incorporates information about both the degradation and the noise.
-
-The frequency-domain Wiener filter is implemented as:
-
-$$
-W(u,v)
-=
-\frac{H^{*}(u,v)}
-{|H(u,v)|^2 + \frac{S_N(u,v)}{S_F(u,v)}}
-$$
-
-where:
-
-- $H^{*}(u,v)$ is the complex conjugate of the degradation response.
-- $S_N$ is the noise power spectrum.
-- $S_F$ is the original image power spectrum.
-
-The restored spectrum is then:
-
-$$
-\hat{F}_{W}(u,v)
-=
-W(u,v)G(u,v)
-$$
-
-Unlike direct inverse filtering, the Wiener filter does not aggressively amplify frequencies where the blur response is weak.
-
-This makes it considerably more robust when the degraded image contains noise.
-
----
-
-# Project Structure
+## Repository Structure
 
 ```text
 image-restoration/
-│
 ├── data/
 │   └── img_restoration.mat
-│
 ├── experiments/
 │   ├── exp_01_inverse_filter.m
 │   ├── exp_02_noise_comparison.m
 │   ├── exp_03_noise_sweep.m
-│   └── exp_04_blur_sweep.m
-│
-├── results/
-│   ├── figures/
-│   │   ├── exp01_inverse_filter.png
-│   │   ├── exp02_noise_comparison.png
-│   │   ├── exp03_psnr_vs_noise.png
-│   │   ├── exp03_mse_vs_noise.png
-│   │   ├── exp04_psnr_vs_blur_length.png
-│   │   └── exp04_mse_vs_blur_length.png
-│   │
-│   └── tables/
-│       ├── exp03_noise_sweep.csv
-│       └── exp04_blur_sweep.csv
-│
+│   ├── exp_04_blur_sweep.m
+│   ├── exp_05_regularized_inverse.m
+│   └── exp_06_laplacian_tikhonov.m
 ├── src/
 │   ├── apply_blur.m
 │   ├── calculate_metrics.m
 │   ├── create_frequency_response.m
 │   ├── generate_motion_psf.m
 │   ├── inverse_filter.m
+│   ├── laplacian_tikhonov_filter.m
 │   └── wiener_filter.m
-│
+├── results/
+│   ├── I1/
+│   │   ├── figures/
+│   │   └── tables/
+│   └── I2/
+│       ├── figures/
+│       └── tables/
 ├── main.m
-│
 └── README.md
+```
+
+The exact files in `src/` and the result folders may evolve as the project develops.
+
+## Requirements
+
+- MATLAB
+- Image Processing Toolbox for `fspecial` (used to generate the motion-blur PSF)
+- `data/img_restoration.mat` containing `I1` and `I2`
+
+## Running the Project
+
+1. Clone or download the repository.
+2. Open MATLAB and set the current folder to the project root.
+3. Confirm that `data/img_restoration.mat` contains `I1` and `I2`.
+4. Check the configurations in `main.m`.
+5. Run:
+
+```matlab
+main
+```
+
+The main script loads the images, configures the experiments, and saves figures and CSV tables under the corresponding image-specific result directories.
+
+To run only one experiment, call its function with an image, a configuration structure, and an output-directory structure. For example:
+
+```matlab
+results = exp_06_laplacian_tikhonov(img, cfg, outDir);
+```
+
+Ensure that `src/` and `experiments/` are on the MATLAB path. If `main.m` adds these paths automatically, running `main` from the project root should be sufficient.
+
+## Evaluation Metrics
+
+### Mean squared error (MSE)
+
+For an original image $f$ and restored image $\hat f$ with $M \times N$ pixels:
+
+$$
+\operatorname{MSE} =
+\frac{1}{MN}\sum_{x=1}^{M}\sum_{y=1}^{N}
+\left(f(x,y)-\hat f(x,y)\right)^2.
+$$
+
+Lower MSE indicates a smaller average squared pixel error.
+
+### Peak signal-to-noise ratio (PSNR)
+
+$$
+\operatorname{PSNR} =
+10\log_{10}\left(\frac{L^2}{\operatorname{MSE}}\right),
+$$
+
+where \(L\) is the peak intensity used by the metric implementation. This project currently uses $L=255$. Higher PSNR generally indicates lower reconstruction error. Extremely high PSNR in a noise-free reconstruction experiment can occur when the numerical error is close to floating-point precision.
+
+## Current Results
+
+The following results are from the current **I2** run with motion length 15, angle 0 degrees, and target noise variance 100. They are included as a development snapshot, not as final results for both images.
+
+| Method / experiment | MSE | PSNR (dB) |
+|---|---:|---:|
+| Inverse filtering, noisy observation | 350394.016 | -7.3148 |
+| Wiener filtering, noisy observation | 324.564 | 23.0178 |
+| Scalar regularized inverse, selected lambda = 0.06 | 545.237 | 20.7649 |
+| Laplacian/Tikhonov, selected lambda ≈ 0.0921711 | 370.217 | 22.4462 |
+
+For Experiment 06, the measured noise variance was approximately 100.31. The best Laplacian/Tikhonov lambda was selected from the configured sweep using the clean reference image's PSNR.
+
+The noise-sweep and blur-sweep experiments also show that, for the current I2 configuration, Wiener-filter PSNR decreases as the target noise variance or motion-blur length increases. Consult the CSV files in `results/I2/tables/` for the full numerical results.
+
+## Interpretation and Limitations
+
+- The blur response is generated synthetically and assumed known to the restoration filters. Real applications may require blur estimation.
+- The experiments use a circular-convolution model through FFTs. Real image boundaries may behave differently.
+- The Wiener implementation uses the original image's Fourier spectrum. This is oracle-informed and would require an estimated spectrum in a practical deployment.
+- The current regularization sweeps select parameters using reference-image PSNR. This is suitable for controlled analysis but is not available when the clean test image is unknown.
+- Noise is generated synthetically as zero-mean Gaussian noise with the configured variance. Actual measured variance can differ slightly from the target due to finite image size.
+- PSNR uses a peak intensity of 255. This is appropriate for the 8-bit intensity scale used in the experiments, but metric conventions should remain consistent when comparing images.
+
+## Reproducibility
+
+- A fixed random seed is used to make noise generation reproducible.
+- The experiments save numerical tables as CSV files and plots as PNG files.
+- Run both images with the same experimental settings when comparing image-dependent behavior.
+- Record any changes to blur parameters, noise levels, thresholds, lambda ranges, or metric conventions when generating final results.

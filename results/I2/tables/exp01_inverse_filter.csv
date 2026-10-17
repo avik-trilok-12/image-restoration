@@ -1,0 +1,2 @@
+Image,Rows,Columns,MotionLength,MotionAngle,Epsilon,MinAbsH,MaxAbsH,DiscardedPoints,TotalPoints,DiscardedPercentage,MSE,PSNR_dB
+I2,256,256,15,0,0.001,0.00395006091612298,0.999999999999997,0,65536,0,3.07685104076139e-24,283.249738895607

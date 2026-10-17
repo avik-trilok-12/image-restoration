@@ -8,6 +8,28 @@ blurred = apply_blur(img, H);
 restored = inverse_filter(blurred, H, cfg.epsilon);
 [mse, psnrValue] = calculate_metrics(img, restored);
 
+%% Numerical reconstruction diagnostic
+
+% Original image: img
+% Blurred image: blurred
+% Reconstructed image: restored
+
+errorImage = img - restored;
+
+mseDiagnostic = mean(errorImage(:).^2);
+maxAbsError = max(abs(errorImage(:)));
+rmseDiagnostic = sqrt(mseDiagnostic);
+
+fprintf('\n--- Numerical Reconstruction Diagnostic ---\n');
+fprintf('Image: %s\n', cfg.imageName);
+fprintf('MSE: %.16e\n', mseDiagnostic);
+fprintf('RMSE: %.16e\n', rmseDiagnostic);
+fprintf('Maximum absolute error: %.16e\n', maxAbsError);
+fprintf('Minimum restored value: %.8f\n', min(restored(:)));
+fprintf('Maximum restored value: %.8f\n', max(restored(:)));
+fprintf('Restored image contains NaN: %d\n', any(isnan(restored(:))));
+fprintf('Restored image contains Inf: %d\n', any(isinf(restored(:))));
+
 minH = min(abs(H(:)));
 maxH = max(abs(H(:)));
 valid = abs(H) > cfg.epsilon;

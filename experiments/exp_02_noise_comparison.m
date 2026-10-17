@@ -13,7 +13,9 @@ degraded = blurred + noise;
 actualNoiseVariance = var(noise(:));
 
 restoredInverse = inverse_filter(degraded, H, cfg.epsilon);
+
 F = fft2(img);
+
 restoredWiener = wiener_filter(degraded, H, F, cfg.noiseVariance);
 
 [mseInverse, psnrInverse] = calculate_metrics(img, restoredInverse);
