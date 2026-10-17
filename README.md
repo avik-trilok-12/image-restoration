@@ -178,7 +178,7 @@ Ensure that `src/` and `experiments/` are on the MATLAB path. If `main.m` adds t
 For an original image $f$ and restored image $\hat f$ with $M \times N$ pixels:
 
 $$
-\operatorname{MSE} =
+{MSE} =
 \frac{1}{MN}\sum_{x=1}^{M}\sum_{y=1}^{N}
 \left(f(x,y)-\hat f(x,y)\right)^2.
 $$
@@ -188,8 +188,8 @@ Lower MSE indicates a smaller average squared pixel error.
 ### Peak signal-to-noise ratio (PSNR)
 
 $$
-\operatorname{PSNR} =
-10\log_{10}\left(\frac{L^2}{\operatorname{MSE}}\right),
+{PSNR} =
+10\log_{10}\left(\frac{L^2}{{MSE}}\right),
 $$
 
 where \(L\) is the peak intensity used by the metric implementation. This project currently uses $L=255$. Higher PSNR generally indicates lower reconstruction error. Extremely high PSNR in a noise-free reconstruction experiment can occur when the numerical error is close to floating-point precision.
